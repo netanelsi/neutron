@@ -13,7 +13,7 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-
+from neutron.db.models import segment
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron.plugins.ml2.drivers.openvswitch.agent.openflow.ovs_ofctl \
     import br_dvr_process
@@ -40,12 +40,18 @@ class OVSPhysicalBridge(ovs_bridge.OVSAgentBridge,
                           in_port=port,
                           dl_vlan=lvid,
                           actions="strip_vlan,normal")
-        else:
+        elif(segmentation_id.isInteger()):
             self.add_flow(table=table_id,
                           priority=4,
                           in_port=port,
                           dl_vlan=lvid,
                           actions="mod_vlan_vid:%s,normal" % segmentation_id)
+        else:
+            self.add_flow(table=table_id,
+                          priority=4,
+                          in_port=port,
+                          dl_vlan=lvid,
+                          actions="mod_vlan_vid:999,normal")
 
     def reclaim_local_vlan(self, port, lvid):
         self.delete_flows(in_port=port, dl_vlan=lvid)

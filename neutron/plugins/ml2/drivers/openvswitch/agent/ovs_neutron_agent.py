@@ -603,6 +603,18 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         int_br.provision_local_vlan(port=int_port, lvid=lvid,
                                     segmentation_id=segmentation_id)
 
+    def _local_vlan_for_qinq(self, lvid, physical_network, segmentation_id):
+        distributed = self.enable_distributed_routing
+        phys_br = self.phys_brs[physical_network]
+        phys_port = self.phys_ofports[physical_network]
+        int_br = self.int_br
+        int_port = self.int_ofports[physical_network]
+        phys_br.provision_local_vlan(port=phys_port, lvid=lvid,
+                                     segmentation_id=segmentation_id + 0.1,
+                                     distributed=distributed)
+        int_br.provision_local_vlan(port=int_port, lvid=lvid,
+                                    segmentation_id=segmentation_id+0.1)
+
     def provision_local_vlan(self, net_uuid, network_type, physical_network,
                              segmentation_id):
         '''Provisions a local VLAN.
@@ -673,6 +685,17 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                                           segmentation_id)
             else:
                 LOG.error(_LE("Cannot provision VLAN network for "
+                              "net-id=%(net_uuid)s - no bridge for "
+                              "physical_network %(physical_network)s"),
+                          {'net_uuid': net_uuid,
+                           'physical_network': physical_network})
+        elif network_type == p_const.TYPE_QINQ:
+            print('the network type is qinq')
+            if physical_network in self.phys_brs:
+                self._local_vlan_for_qinq(lvid, physical_network,
+                                          segmentation_id)
+            else:
+                LOG.error(_LE("Cannot provision QINQ network for "
                               "net-id=%(net_uuid)s - no bridge for "
                               "physical_network %(physical_network)s"),
                           {'net_uuid': net_uuid,

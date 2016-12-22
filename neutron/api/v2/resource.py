@@ -39,6 +39,7 @@ def Resource(controller, faults=None, deserializers=None, serializers=None,
     """Represents an API entity resource and the associated serialization and
     deserialization logic
     """
+    print ('Resource entering..', )
     default_deserializers = {'application/json': wsgi.JSONDeserializer()}
     default_serializers = {'application/json': wsgi.JSONDictSerializer()}
     format_types = {'json': 'application/json'}

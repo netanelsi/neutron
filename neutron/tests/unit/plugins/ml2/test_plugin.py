@@ -222,6 +222,11 @@ class TestMl2V2HTTPResponse(test_plugin.TestV2HTTPResponse,
 class TestMl2NetworksV2(test_plugin.TestNetworksV2,
                         Ml2PluginV2TestCase):
     def setUp(self, plugin=None):
+        config.cfg.CONF.set_override('type_drivers', ['local', 'flat', 'qinq', 'vlan', 'gre', 'vxlan', 'geneve'], group='ml2')
+        print 'yoav damri'
+        print config.cfg.CONF._groups
+        print config.cfg.CONF._opts
+        # config.cfg.CONF.set_override('network_qinq_ranges', ['1:100'], group='ml2_type_qinq')
         super(TestMl2NetworksV2, self).setUp()
         # provider networks
         self.pnets = [{'name': 'net1',
@@ -254,6 +259,7 @@ class TestMl2NetworksV2(test_plugin.TestNetworksV2,
         self.nets = self.mp_nets + self.pnets
 
     def test_network_after_create_callback(self):
+        print ('test_network_after_create_callback starting...')
         after_create = mock.Mock()
         registry.subscribe(after_create, resources.NETWORK,
                            events.AFTER_CREATE)
@@ -318,9 +324,11 @@ class TestMl2NetworksV2(test_plugin.TestNetworksV2,
     def _create_and_verify_networks(self, networks):
         for net_idx, net in enumerate(networks):
             # create
+            print ('create request before verify', net)
             req = self.new_create_request('networks',
                                           {'network': net})
             # verify
+            print ('verify request', req)
             network = self.deserialize(self.fmt,
                                        req.get_response(self.api))['network']
             if mpnet.SEGMENTS not in net:
@@ -359,6 +367,7 @@ class TestMl2NetworksV2(test_plugin.TestNetworksV2,
             self.assertEqual(expected_net[attr], network[attr])
 
     def test_list_mpnetworks_with_segmentation_id(self):
+        print ('gal is nets', self.nets)
         self._create_and_verify_networks(self.nets)
 
         # get all networks with seg_id=1 (including multisegment networks)
@@ -1842,7 +1851,7 @@ class TestMultiSegmentNetworks(Ml2PluginV2TestCase):
         dynamic_segmentation_id = dynamic_segment[driver_api.SEGMENTATION_ID]
         self.assertGreater(dynamic_segmentation_id, 0)
         self.driver.type_manager.release_dynamic_segment(
-            self.context.session, dynamic_segment[driver_api.ID])
+            self.context, dynamic_segment[driver_api.ID])
         self.assertIsNone(segments_db.get_dynamic_segment(
             self.context.session, network_id, 'physnet1'))
 
@@ -2009,7 +2018,7 @@ class TestMultiSegmentNetworks(Ml2PluginV2TestCase):
             with mock.patch('neutron.plugins.ml2.managers.segments_db') as db:
                 db.get_network_segments.return_value = (segment,)
                 self.driver.type_manager.release_network_segments(
-                    self.context.session, network_id)
+                    self.context, network_id)
 
                 log.error.assert_called_once_with(
                     "Failed to release segment '%s' because "
@@ -2743,3 +2752,92 @@ class TestML2Segments(Ml2PluginV2TestCase):
                               context=self.context, segment=segment)
             exist_port = self._show('ports', port['port']['id'])
             self.assertEqual(port['port']['id'], exist_port['port']['id'])
+class TestMl2QinqNetwork(test_plugin.TestNetworksV2,
+                        Ml2PluginV2TestCase):
+    def setUp(self, plugin=None):
+        config.cfg.CONF.set_override('type_drivers', ['local', 'flat', 'qinq', 'vlan', 'gre', 'vxlan', 'geneve'], group='ml2')
+        print 'yoav damri'
+        print config.cfg.CONF._groups
+        print config.cfg.CONF._opts
+        # config.cfg.CONF.set_override('network_qinq_ranges', ['1:100'], group='ml2_type_qinq')
+        super(TestMl2QinqNetwork, self).setUp()
+        # provider networks
+        self.pnets = [{'name': 'net1',
+                       pnet.NETWORK_TYPE: 'qinq',
+                       pnet.PHYSICAL_NETWORK: 'physnet1',
+                       pnet.SEGMENTATION_ID: 11,
+                       'tenant_id': 'tenant_one'},
+                      {'name': 'net2',
+                       pnet.NETWORK_TYPE: 'qinq',
+                       pnet.PHYSICAL_NETWORK: 'physnet2',
+                       pnet.SEGMENTATION_ID: 211,
+                       'tenant_id': 'tenant_one'},
+                      {'name': 'net3',
+                       pnet.NETWORK_TYPE: 'qinq',
+                       pnet.PHYSICAL_NETWORK: 'physnet2',
+                       pnet.SEGMENTATION_ID: 221,
+                       'tenant_id': 'tenant_one'}
+                      ]
+        # multiprovider networks
+        self.mp_nets = [{'name': 'net4',
+                         mpnet.SEGMENTS:
+                             [{pnet.NETWORK_TYPE: 'qinq',
+                               pnet.PHYSICAL_NETWORK: 'physnet2',
+                               pnet.SEGMENTATION_ID: 11},
+                              {pnet.NETWORK_TYPE: 'qinq',
+                               pnet.PHYSICAL_NETWORK: 'physnet2',
+                               pnet.SEGMENTATION_ID: 202}],
+                         'tenant_id': 'tenant_one'}
+                        ]
+        self.nets = self.mp_nets + self.pnets
+
+    def test_list_mpnetworks_with_segmentation_id(self):
+        print ('gal is nets', self.nets)
+        self._create_and_verify_networks(self.nets)
+
+        # get all networks with seg_id=1 (including multisegment networks)
+        lookup_vlan_id = 11
+        networks = self._lookup_network_by_segmentation_id(lookup_vlan_id, 2)
+
+        # get the mpnet
+        networks = [n for n in networks['networks'] if mpnet.SEGMENTS in n]
+        network = networks.pop()
+        # verify attributes of the looked up item
+        segments = network[mpnet.SEGMENTS]
+        expected_segments = self.mp_nets[0][mpnet.SEGMENTS]
+        self.assertEqual(len(expected_segments), len(segments))
+        for expected, actual in zip(expected_segments, segments):
+            self.assertEqual(expected, actual)
+    def _create_and_verify_networks(self, networks):
+        for net_idx, net in enumerate(networks):
+            # create
+            print ('create request before verify', net)
+            req = self.new_create_request('networks',
+                                          {'network': net})
+            # verify
+            print ('verify request', req)
+            network = self.deserialize(self.fmt,
+                                       req.get_response(self.api))['network']
+            if mpnet.SEGMENTS not in net:
+                for k, v in six.iteritems(net):
+                    self.assertEqual(net[k], network[k])
+                    self.assertNotIn(mpnet.SEGMENTS, network)
+            else:
+                segments = network[mpnet.SEGMENTS]
+                expected_segments = net[mpnet.SEGMENTS]
+                self.assertEqual(len(expected_segments), len(segments))
+                for expected, actual in zip(expected_segments, segments):
+                    self.assertEqual(expected, actual)
+
+    def _lookup_network_by_segmentation_id(self, seg_id, num_expected_nets):
+        params_str = "%s=%s" % (pnet.SEGMENTATION_ID, seg_id)
+        net_req = self.new_list_request('networks', None,
+                                        params=params_str)
+        networks = self.deserialize(self.fmt, net_req.get_response(self.api))
+        if num_expected_nets:
+            self.assertIsNotNone(networks)
+            print networks['networks']
+            self.assertEqual(num_expected_nets, len(networks['networks']))
+        else:
+            self.assertIsNone(networks)
+        return networks

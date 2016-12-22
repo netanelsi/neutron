@@ -71,6 +71,7 @@ TYPE_GRE = 'gre'
 TYPE_LOCAL = 'local'
 TYPE_VXLAN = 'vxlan'
 TYPE_VLAN = 'vlan'
+TYPE_QINQ = 'qinq'
 TYPE_NONE = 'none'
 
 # Values for network_type
@@ -78,6 +79,10 @@ TYPE_NONE = 'none'
 # For VLAN Network
 MIN_VLAN_TAG = 1
 MAX_VLAN_TAG = 4094
+
+# For QINQ Network
+MIN_QINQ_TAG = 1
+MAX_QINQ_TAG = 4094
 
 # For Geneve Tunnel
 MIN_GENEVE_VNI = 1

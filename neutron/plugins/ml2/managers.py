@@ -89,33 +89,47 @@ class TypeManager(stevedore.named.NamedExtensionManager):
             raise SystemExit(1)
 
     def _process_provider_segment(self, segment):
+        print ('_process_provider_segment')
         (network_type, physical_network,
          segmentation_id) = (self._get_attribute(segment, attr)
                              for attr in provider.ATTRIBUTES)
+        print ('_process_provider_segment1')
 
         if validators.is_attr_set(network_type):
+            print ('_process_provider_segment2')
             segment = {api.NETWORK_TYPE: network_type,
                        api.PHYSICAL_NETWORK: physical_network,
                        api.SEGMENTATION_ID: segmentation_id}
+            print ('_process_provider_segment3')
             self.validate_provider_segment(segment)
+            print ('_process_provider_segment4')
             return segment
 
+        print ('_process_provider_segment5')
         msg = _("network_type required")
         raise exc.InvalidInput(error_message=msg)
 
     def _process_provider_create(self, network):
+        print ('_process_provider_create')
         if any(validators.is_attr_set(network.get(attr))
                for attr in provider.ATTRIBUTES):
+            print ('_process_provider_create1.1')
             # Verify that multiprovider and provider attributes are not set
             # at the same time.
             if validators.is_attr_set(network.get(mpnet.SEGMENTS)):
+                print ('_process_provider_create1.2')
                 raise mpnet.SegmentsSetInConjunctionWithProviders()
+            print ('_process_provider_create1.3')
             segment = self._get_provider_segment(network)
+            print ('_process_provider_create1.4')
             return [self._process_provider_segment(segment)]
         elif validators.is_attr_set(network.get(mpnet.SEGMENTS)):
+            print ('_process_provider_create2.1')
             segments = [self._process_provider_segment(s)
                         for s in network[mpnet.SEGMENTS]]
+            print ('_process_provider_create2.2')
             mpnet.check_duplicate_segments(segments, self.is_partial_segment)
+            print ('_process_provider_create2.3')
             return segments
 
     def _match_segment(self, segment, filters):
@@ -190,22 +204,30 @@ class TypeManager(stevedore.named.NamedExtensionManager):
 
     def create_network_segments(self, context, network, tenant_id):
         """Call type drivers to create network segments."""
+        print ('create_network_segments0')
         segments = self._process_provider_create(network)
+        print ('create_network_segments')
         session = context.session
         with session.begin(subtransactions=True):
             network_id = network['id']
             if segments:
                 for segment_index, segment in enumerate(segments):
+                    print ('create_network_segments1.1')
                     segment = self.reserve_provider_segment(
                         session, segment)
+                    print ('create_network_segments1.2')
                     self._add_network_segment(context, network_id, segment,
                                               segment_index)
             elif (cfg.CONF.ml2.external_network_type and
                   self._get_attribute(network, external_net.EXTERNAL)):
+                print ('create_network_segments2.1')
                 segment = self._allocate_ext_net_segment(session)
+                print ('create_network_segments2.2')
                 self._add_network_segment(context, network_id, segment)
             else:
+                print ('create_network_segments3.1')
                 segment = self._allocate_tenant_net_segment(session)
+                print ('create_network_segments3.2')
                 self._add_network_segment(context, network_id, segment)
 
     def reserve_network_segment(self, session, segment_data):
@@ -239,9 +261,13 @@ class TypeManager(stevedore.named.NamedExtensionManager):
 
     def validate_provider_segment(self, segment):
         network_type = segment[api.NETWORK_TYPE]
+        print ('validate_provider_segment', network_type)
         driver = self.drivers.get(network_type)
+        print ('validate_provider_segment', driver)
         if driver:
+            print ('validate_provider_segment1')
             driver.obj.validate_provider_segment(segment)
+            print ('validate_provider_segment2')
         else:
             msg = _("network_type value '%s' not supported") % network_type
             raise exc.InvalidInput(error_message=msg)
@@ -428,10 +454,19 @@ class MechanismManager(stevedore.named.NamedExtensionManager):
         what db exception is retriable
         """
         errors = []
+        print('ordered_mech_drivers', self.ordered_mech_drivers)
+        print('ordered_mech_drivers', self.ordered_mech_drivers.__len__())
         for driver in self.ordered_mech_drivers:
             try:
-                getattr(driver.obj, method_name)(context)
+                print('method_name', method_name)
+                print('driver.obj', driver.obj)
+                print('context', context)
+                method = getattr(driver.obj, method_name)
+                print(dir(driver.obj))
+                print('driver', driver)
+                method(context)
             except Exception as e:
+                print('the exception', e)
                 if raise_db_retriable and db_api.is_retriable(e):
                     with excutils.save_and_reraise_exception():
                         LOG.debug("DB exception raised by Mechanism driver "
@@ -452,6 +487,8 @@ class MechanismManager(stevedore.named.NamedExtensionManager):
             )
 
     def create_network_precommit(self, context):
+        print('hello i am MechanismDriver not the tester!!')
+
         """Notify all mechanism drivers during network creation.
 
         :raises: DB retriable error if create_network_precommit raises them

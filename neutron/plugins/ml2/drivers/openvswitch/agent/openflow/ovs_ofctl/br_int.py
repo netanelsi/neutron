@@ -22,6 +22,7 @@
 import netaddr
 
 from neutron_lib import constants as const
+from passlib.handlers.pbkdf2 import dlitz_pbkdf2_sha1
 
 from neutron.common import constants as n_const
 from neutron.plugins.common import constants as p_const
@@ -53,6 +54,8 @@ class OVSIntegrationBridge(ovs_bridge.OVSAgentBridge):
     def provision_local_vlan(self, port, lvid, segmentation_id):
         if segmentation_id is None:
             dl_vlan = 0xffff
+        elif (not segmentation_id.isInteger()):
+            dl_vlan = 999
         else:
             dl_vlan = segmentation_id
         self.add_flow(priority=3,
