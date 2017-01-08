@@ -63,6 +63,11 @@ class OVSIntegrationBridge(ovs_bridge.OVSAgentBridge):
                       dl_vlan=dl_vlan,
                       actions="mod_vlan_vid:%s,normal" % lvid)
 
+    def provision_local_qinq(self, port, int_port):
+        self.add_flow(priority=3,
+                      in_port=port,
+                      actions="output:%s" % int_port)
+
     def reclaim_local_vlan(self, port, segmentation_id):
         if segmentation_id is None:
             dl_vlan = 0xffff

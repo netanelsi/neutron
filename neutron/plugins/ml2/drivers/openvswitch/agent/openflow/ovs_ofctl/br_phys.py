@@ -40,18 +40,20 @@ class OVSPhysicalBridge(ovs_bridge.OVSAgentBridge,
                           in_port=port,
                           dl_vlan=lvid,
                           actions="strip_vlan,normal")
-        elif(segmentation_id.isInteger()):
-            self.add_flow(table=table_id,
-                          priority=4,
-                          in_port=port,
-                          dl_vlan=lvid,
-                          actions="mod_vlan_vid:%s,normal" % segmentation_id)
         else:
             self.add_flow(table=table_id,
                           priority=4,
                           in_port=port,
                           dl_vlan=lvid,
-                          actions="mod_vlan_vid:999,normal")
+                          actions="mod_vlan_vid:%s,normal" % segmentation_id)
+
+    def provision_local_qinq(self, port, int_port, lvid, segmentation_id, distributed):
+        table_id = constants.LOCAL_VLAN_TRANSLATION if distributed else 0
+        self.add_flow(table=table_id,
+                      priority=4,
+                      in_port=port,
+                      dl_vlan=lvid,
+                      actions="normal")
 
     def reclaim_local_vlan(self, port, lvid):
         self.delete_flows(in_port=port, dl_vlan=lvid)
