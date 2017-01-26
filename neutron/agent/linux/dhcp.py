@@ -369,11 +369,6 @@ class Dnsmasq(DhcpLocalProcess):
                                ('set:', self._TAG_PREFIX % i,
                                 cidr.network, mode, lease))
                 else:
-                    if cidr.prefixlen < 64:
-                        LOG.debug('Ignoring subnet %(subnet)s, CIDR has '
-                                  'prefix length < 64: %(cidr)s',
-                                  {'subnet': subnet.id, 'cidr': cidr})
-                        continue
                     cmd.append('--dhcp-range=%s%s,%s,%s,%d,%s' %
                                ('set:', self._TAG_PREFIX % i,
                                 cidr.network, mode,
@@ -973,9 +968,7 @@ class Dnsmasq(DhcpLocalProcess):
         with 3rd party backends.
         """
         if conf.force_metadata:
-            # Only ipv4 subnet, with dhcp enabled, will use metadata proxy.
-            return any(s for s in network.subnets
-                       if s.ip_version == 4 and s.enable_dhcp)
+            return True
 
         if conf.enable_metadata_network and conf.enable_isolated_metadata:
             # check if the network has a metadata subnet
@@ -988,10 +981,7 @@ class Dnsmasq(DhcpLocalProcess):
             return False
 
         isolated_subnets = cls.get_isolated_subnets(network)
-        # Only ipv4 isolated subnet, which has dhcp enabled, will use
-        # metadata proxy.
-        return any(isolated_subnets[s.id] for s in network.subnets
-                   if s.ip_version == 4 and s.enable_dhcp)
+        return any(isolated_subnets[subnet.id] for subnet in network.subnets)
 
 
 class DeviceManager(object):
@@ -1268,7 +1258,7 @@ class DeviceManager(object):
                     net = netaddr.IPNetwork(subnet.cidr)
                     ip_cidrs.append('%s/%s' % (gateway, net.prefixlen))
 
-        if self.conf.force_metadata or self.conf.enable_isolated_metadata:
+        if self.conf.enable_isolated_metadata:
             ip_cidrs.append(METADATA_DEFAULT_CIDR)
 
         self.driver.init_l3(interface_name, ip_cidrs,

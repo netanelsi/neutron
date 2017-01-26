@@ -58,6 +58,13 @@ class OVSIntegrationBridge(ovs_bridge.OVSAgentBridge):
                       dl_vlan=dl_vlan,
                       actions="mod_vlan_vid:%s,normal" % lvid)
 
+    def provision_local_qinq(self, port, int_port):
+        self.add_flow(priority=3,
+                      in_port=port,
+                      # eth_dst=int_port.pop(),
+                      # actions="output:%s" % int_port.pop())
+                      actions="output:%s" % int_port)
+
     def reclaim_local_vlan(self, port, segmentation_id):
         if segmentation_id is None:
             dl_vlan = 0xffff
@@ -80,7 +87,7 @@ class OVSIntegrationBridge(ovs_bridge.OVSAgentBridge):
                       dl_vlan=vlan_tag,
                       dl_dst=dst_mac,
                       actions="strip_vlan,mod_dl_src:%s,"
-                      "output:%s" % (gateway_mac, dst_port))
+                              "output:%s" % (gateway_mac, dst_port))
 
     def delete_dvr_to_src_mac(self, network_type, vlan_tag, dst_mac):
         table_id = self._dvr_to_src_mac_table_id(network_type)

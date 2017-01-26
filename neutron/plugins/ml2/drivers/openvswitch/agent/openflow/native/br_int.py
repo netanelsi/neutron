@@ -72,7 +72,7 @@ class OVSIntegrationBridge(ovs_bridge.OVSAgentBridge):
             ofpp.OFPActionSetField(vlan_vid=lvid | ofp.OFPVID_PRESENT),
             ofpp.OFPActionOutput(ofp.OFPP_NORMAL, 0),
         ]
-        self.install_apply_actions(priority=3,
+        self.install_apply_actions(priority=98,
                                    match=match,
                                    actions=actions)
 

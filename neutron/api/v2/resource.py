@@ -78,9 +78,7 @@ def Resource(controller, faults=None, deserializers=None, serializers=None,
         try:
             if request.body:
                 args['body'] = deserializer.deserialize(request.body)['body']
-
             method = getattr(controller, action)
-
             result = method(request=request, **args)
         except (exceptions.NeutronException,
                 netaddr.AddrFormatError,

@@ -57,12 +57,11 @@ from neutron.plugins.ml2.drivers.openvswitch.agent \
 from neutron.plugins.ml2.drivers.openvswitch.agent \
     import ovs_dvr_neutron_agent
 
-
 LOG = logging.getLogger(__name__)
 cfg.CONF.import_group('AGENT', 'neutron.plugins.ml2.drivers.openvswitch.'
-                      'agent.common.config')
+                               'agent.common.config')
 cfg.CONF.import_group('OVS', 'neutron.plugins.ml2.drivers.openvswitch.agent.'
-                      'common.config')
+                             'common.config')
 
 
 class _mac_mydialect(netaddr.mac_unix):
@@ -70,7 +69,6 @@ class _mac_mydialect(netaddr.mac_unix):
 
 
 class LocalVLANMapping(object):
-
     def __init__(self, vlan, network_type, physical_network, segmentation_id,
                  vif_ports=None):
         if vif_ports is None:
@@ -182,10 +180,12 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.setup_integration_br()
         # Stores port update notifications for processing in main rpc loop
         self.updated_ports = set()
+
         # Stores port delete notifications
         self.deleted_ports = set()
 
         self.network_ports = collections.defaultdict(set)
+        self.network_to_mac = collections.defaultdict(set)
         # keeps association between ports and ofports to detect ofport change
         self.vifname_to_ofport_map = {}
         self.setup_rpc()
@@ -246,8 +246,8 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
         # Security group agent support
         self.sg_agent = sg_rpc.SecurityGroupAgentRpc(self.context,
-                self.sg_plugin_rpc, self.local_vlan_map,
-                defer_refresh_firewall=True, integration_bridge=self.int_br)
+                                                     self.sg_plugin_rpc, self.local_vlan_map,
+                                                     defer_refresh_firewall=True, integration_bridge=self.int_br)
 
         # we default to False to provide backward compat with out of tree
         # firewall drivers that expect the logic that existed on the Neutron
@@ -259,7 +259,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             agent_conf.prevent_arp_spoofing and
             not self.sg_agent.firewall.provides_arp_spoofing_protection)
 
-        #TODO(mangelajo): optimize resource_versions to only report
+        # TODO(mangelajo): optimize resource_versions to only report
         #                 versions about resources which are common,
         #                 or which are used by specific extensions.
         self.agent_state = {
@@ -271,16 +271,16 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                                'tunneling_ip': self.local_ip,
                                'l2_population': self.l2_pop,
                                'arp_responder_enabled':
-                               self.arp_responder_enabled,
+                                   self.arp_responder_enabled,
                                'enable_distributed_routing':
-                               self.enable_distributed_routing,
+                                   self.enable_distributed_routing,
                                'log_agent_heartbeats':
-                               agent_conf.log_agent_heartbeats,
+                                   agent_conf.log_agent_heartbeats,
                                'extensions': self.ext_manager.names(),
                                'datapath_type': ovs_conf.datapath_type,
                                'ovs_capabilities': self.ovs.capabilities,
                                'vhostuser_socket_dir':
-                               ovs_conf.vhostuser_socket_dir,
+                                   ovs_conf.vhostuser_socket_dir,
                                portbindings.OVS_HYBRID_PLUG: hybrid_plug},
             'resource_versions': resources.LOCAL_RESOURCE_VERSIONS,
             'agent_type': agent_conf.agent_type,
@@ -408,13 +408,15 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             if vif_id in vlan_mapping.vif_ports:
                 return network_id
 
-    def port_update(self, context, **kwargs):
-        port = kwargs.get('port')
+    def port_update(self, context, port=None, **kwargs):
+        port = port
         # Put the port identifier in the updated_ports set.
         # Even if full port details might be provided to this call,
         # they are not used since there is no guarantee the notifications
         # are processed in the same order as the relevant API requests
         self.updated_ports.add(port['id'])
+        LOG.debug("netanel sagron kwargs %s", kwargs)
+        LOG.debug("netanel sagron port %s", port)
         LOG.debug("port_update message processed for port %s", port['id'])
 
     def port_delete(self, context, **kwargs):
@@ -624,6 +626,36 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         int_br.provision_local_vlan(port=int_port, lvid=lvid,
                                     segmentation_id=segmentation_id)
 
+    def _local_vlan_for_qinq(self, lvid, net_uuid, physical_network, segmentation_id):
+        distributed = self.enable_distributed_routing
+        phys_br = self.phys_brs[physical_network]
+        phys_port = self.phys_ofports[physical_network]
+        int_br = self.int_br
+        int_port = self.int_ofports[physical_network]
+        int_phys_port = self.network_to_mac[physical_network]
+        int_phys_portos = self.network_ports[physical_network]
+        for entry in self.int_br.get_port_number_list(int_port):
+            # for element in entry.get('external_ids'):
+            #     LOG.error(_LE("netanel element in external real%s"),
+            #               element)
+            #     # if element.get('iface-id') == 'c7f6adb4-c1b5-43e8-aa13-ade39815d154':
+            #     if '9127806a-ddb8-44bf-937d-c04dfc91ae1f' == element:
+            #         int_phys_port = element
+            #         LOG.error("netanel lala did it works?%s", int_phys_port)
+            # LOG.error(_LE("netanel element real iface-id %s"),
+            #           entry.get('external_ids').get('iface-id'))
+            # LOG.error(_LE("netanel element real ofport%s"),
+            #           entry.get('ofport'))
+            if entry.has_key('external_ids'):
+                if entry.get('external_ids').has_key('iface-id'):
+                    if list(int_phys_portos)[0] in entry.get('external_ids').get('iface-id'):
+                        int_phys_port = entry.get('ofport')
+                        LOG.error(_LE("netanel zuzuzuzuzu real%s"),
+                                  int_phys_port)
+
+        phys_br.provision_local_qinq(port=phys_port, distributed=distributed)
+        int_br.provision_local_qinq(port=int_port, int_port=int_phys_port)
+
     def provision_local_vlan(self, net_uuid, network_type, physical_network,
                              segmentation_id):
         '''Provisions a local VLAN.
@@ -691,7 +723,17 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                            'physical_network': physical_network})
         elif network_type == p_const.TYPE_VLAN:
             if physical_network in self.phys_brs:
-                self._local_vlan_for_vlan(lvid, physical_network,
+                self._local_vlan_for_qinq(lvid, net_uuid, physical_network,
+                                          segmentation_id)
+            else:
+                LOG.error(_LE("Cannot provision VLAN network for "
+                              "net-id=%(net_uuid)s - no bridge for "
+                              "physical_network %(physical_network)s"),
+                          {'net_uuid': net_uuid,
+                           'physical_network': physical_network})
+        elif network_type == 'qinq':
+            if physical_network in self.phys_brs:
+                self._local_vlan_for_qinq(lvid, net_uuid, physical_network,
                                           segmentation_id)
             else:
                 LOG.error(_LE("Cannot provision VLAN network for "
@@ -883,7 +925,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 self.context, devices_up, devices_down, self.agent_id,
                 self.conf.host)
             failed_devices = (devices_set.get('failed_devices_up') +
-                devices_set.get('failed_devices_down'))
+                              devices_set.get('failed_devices_down'))
             if failed_devices:
                 LOG.error(_LE("Configuration for devices %s failed!"),
                           failed_devices)
@@ -901,7 +943,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             bridge.set_allowed_macs_for_port(port=vif.ofport, allow_all=True)
             return
         if port_details['device_owner'].startswith(
-            n_const.DEVICE_OWNER_NETWORK_PREFIX):
+                n_const.DEVICE_OWNER_NETWORK_PREFIX):
             LOG.debug("Skipping ARP spoofing rules for network owned port "
                       "'%s'.", vif.port_name)
             bridge.delete_arp_spoofing_protection(port=vif.ofport)
@@ -924,14 +966,14 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                           if netaddr.IPNetwork(ip).version == 6}
         # Allow neighbor advertisements for LLA address.
         ipv6_addresses |= {str(ipv6.get_ipv6_addr_by_EUI64(
-                               n_const.IPV6_LLA_PREFIX, mac))
+            n_const.IPV6_LLA_PREFIX, mac))
                            for mac in mac_addresses}
         if not has_zero_prefixlen_address(ipv6_addresses):
             # Install protection only when prefix is not zero because a /0
             # prefix allows any address anyway and the nd_target can only
             # match on /1 or more.
             bridge.install_icmpv6_na_spoofing_protection(port=vif.ofport,
-                ip_addresses=ipv6_addresses)
+                                                         ip_addresses=ipv6_addresses)
 
         ipv4_addresses = {ip for ip in addresses
                           if netaddr.IPNetwork(ip).version == 4}
@@ -1047,12 +1089,12 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.tun_br.create(secure_mode=True)
         self.tun_br.setup_controllers(self.conf)
         if (not self.int_br.port_exists(self.conf.OVS.int_peer_patch_port) or
-                self.patch_tun_ofport == ovs_lib.INVALID_OFPORT):
+                    self.patch_tun_ofport == ovs_lib.INVALID_OFPORT):
             self.patch_tun_ofport = self.int_br.add_patch_port(
                 self.conf.OVS.int_peer_patch_port,
                 self.conf.OVS.tun_peer_patch_port)
         if (not self.tun_br.port_exists(self.conf.OVS.tun_peer_patch_port) or
-                self.patch_int_ofport == ovs_lib.INVALID_OFPORT):
+                    self.patch_int_ofport == ovs_lib.INVALID_OFPORT):
             self.patch_int_ofport = self.tun_br.add_patch_port(
                 self.conf.OVS.tun_peer_patch_port,
                 self.conf.OVS.int_peer_patch_port)
@@ -1279,7 +1321,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 events['added'] = [e for e in events['added']
                                    if e['name'] != p]
 
-        #TODO(rossella_s): scanning the ancillary bridge won't be needed
+        # TODO(rossella_s): scanning the ancillary bridge won't be needed
         # anymore when https://review.openstack.org/#/c/203381 since the bridge
         # id stored in external_ids will be used to identify the bridge the
         # port belongs to
@@ -1305,6 +1347,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                         ancillary_ports.add(iface_id)
                     else:
                         ports.add(iface_id)
+
         if old_ports_not_ready:
             old_ports_not_ready_attrs = self.int_br.get_ports_attributes(
                 'Interface', columns=['name', 'external_ids', 'ofport'],
@@ -1329,7 +1372,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
         self._update_port_info_failed_devices_stats(port_info, failed_devices)
         self._update_port_info_failed_devices_stats(ancillary_port_info,
-                                failed_ancillary_devices)
+                                                    failed_ancillary_devices)
 
         if updated_ports is None:
             updated_ports = set()
@@ -1378,8 +1421,8 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         for lvm in self.local_vlan_map.values():
             for port in lvm.vif_ports.values():
                 if (
-                    port.port_name in port_tags
-                    and port_tags[port.port_name] != lvm.vlan
+                                port.port_name in port_tags
+                        and port_tags[port.port_name] != lvm.vlan
                 ):
                     LOG.info(
                         _LI("Port '%(port_name)s' has lost "
@@ -1421,7 +1464,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
     def _setup_tunnel_port(self, br, port_name, remote_ip, tunnel_type):
         try:
             if (netaddr.IPAddress(self.local_ip).version !=
-                netaddr.IPAddress(remote_ip).version):
+                    netaddr.IPAddress(remote_ip).version):
                 LOG.error(_LE("IP version mismatch, cannot create tunnel: "
                               "local_ip=%(lip)s remote_ip=%(rip)s"),
                           {'lip': self.local_ip, 'rip': remote_ip})
@@ -1514,6 +1557,8 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             if 'port_id' in details:
                 LOG.info(_LI("Port %(device)s updated. Details: %(details)s"),
                          {'device': device, 'details': details})
+                self.network_to_mac[details['physical_network']].add(details['mac_address'])
+                self.network_ports[details['physical_network']].add(details['port_id'])
                 details['vif_port'] = port
                 need_binding = self.treat_vif_port(port, details['port_id'],
                                                    details['network_id'],
@@ -1625,7 +1670,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         if devices_added_updated:
             start = time.time()
             (skipped_devices, need_binding_devices,
-            security_disabled_ports, failed_devices['added']) = (
+             security_disabled_ports, failed_devices['added']) = (
                 self.treat_devices_added_or_updated(
                     devices_added_updated, ovs_restarted))
             LOG.debug("process_network_ports - iteration:%(iter_num)d - "
@@ -1810,9 +1855,9 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             bridge.cleanup_flows()
 
     def process_port_info(self, start, polling_manager, sync, ovs_restarted,
-                       ports, ancillary_ports, updated_ports_copy,
-                       consecutive_resyncs, ports_not_ready_yet,
-                       failed_devices, failed_ancillary_devices):
+                          ports, ancillary_ports, updated_ports_copy,
+                          consecutive_resyncs, ports_not_ready_yet,
+                          failed_devices, failed_ancillary_devices):
         # There are polling managers that don't have get_events, e.g.
         # AlwaysPoll used by windows implementations
         # REVISIT (rossella_s) This needs to be reworked to hide implementation
@@ -1826,7 +1871,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     LOG.warning(_LW(
                         "Clearing cache of registered ports,"
                         " retries to resync were > %s"),
-                             constants.MAX_DEVICE_RETRIES)
+                        constants.MAX_DEVICE_RETRIES)
                     ports.clear()
                     ancillary_ports.clear()
                     consecutive_resyncs = 0
@@ -1835,7 +1880,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 # TODO(rossella_s): For implementations that use AlwaysPoll
                 # resync if a device failed. This can be improved in future
                 sync = (any(failed_devices.values()) or
-                    any(failed_ancillary_devices.values()))
+                        any(failed_ancillary_devices.values()))
 
             # NOTE(rossella_s) don't empty the queue of events
             # calling polling_manager.get_events() since
@@ -1900,7 +1945,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     LOG.warning(_LW(
                         "Device %(dev)s failed for %(times)s times and won't "
                         "be retried anymore"), {
-                            'dev': dev, 'times': constants.MAX_DEVICE_RETRIES})
+                        'dev': dev, 'times': constants.MAX_DEVICE_RETRIES})
                 else:
                     new_failed_devices_retries_map[dev] = retries + 1
             return devices_not_to_retry
@@ -1964,9 +2009,9 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     tunnel_sync = True
                 if self.enable_distributed_routing:
                     self.dvr_agent.reset_ovs_parameters(self.int_br,
-                                                 self.tun_br,
-                                                 self.patch_int_ofport,
-                                                 self.patch_tun_ofport)
+                                                        self.tun_br,
+                                                        self.patch_int_ofport,
+                                                        self.patch_tun_ofport)
                     self.dvr_agent.reset_dvr_parameters()
                     self.dvr_agent.setup_dvr_flows()
                 # restart the polling manager so that it will signal as added
@@ -1975,7 +2020,7 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 # BasePollingManager that will be implemented by AlwaysPoll as
                 # no action and by InterfacePollingMinimizer as start/stop
                 if isinstance(
-                    polling_manager, polling.InterfacePollingMinimizer):
+                        polling_manager, polling.InterfacePollingMinimizer):
                     polling_manager.stop()
                     polling_manager.start()
             elif ovs_status == constants.OVS_DEAD:
@@ -1991,14 +2036,14 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     tunnel_sync = self.tunnel_sync()
                 except Exception:
                     LOG.exception(
-                            _LE("Error while configuring tunnel endpoints"))
+                        _LE("Error while configuring tunnel endpoints"))
                     tunnel_sync = True
             ovs_restarted |= (ovs_status == constants.OVS_RESTARTED)
             devices_need_retry = (any(failed_devices.values()) or
-                any(failed_ancillary_devices.values()) or
-                ports_not_ready_yet)
+                                  any(failed_ancillary_devices.values()) or
+                                  ports_not_ready_yet)
             if (self._agent_has_updates(polling_manager) or sync
-                    or devices_need_retry):
+                or devices_need_retry):
                 try:
                     LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
                               "starting polling. Elapsed:%(elapsed).3f",
@@ -2012,10 +2057,10 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     self.updated_ports = set()
                     (port_info, ancillary_port_info, consecutive_resyncs,
                      ports_not_ready_yet) = (self.process_port_info(
-                            start, polling_manager, sync, ovs_restarted,
-                            ports, ancillary_ports, updated_ports_copy,
-                            consecutive_resyncs, ports_not_ready_yet,
-                            failed_devices, failed_ancillary_devices))
+                        start, polling_manager, sync, ovs_restarted,
+                        ports, ancillary_ports, updated_ports_copy,
+                        consecutive_resyncs, ports_not_ready_yet,
+                        failed_devices, failed_ancillary_devices))
                     sync = False
                     self.process_deleted_ports(port_info)
                     ofport_changed_ports = self.update_stale_ofport_rules()
@@ -2030,8 +2075,8 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     # Secure and wire/unwire VIFs and update their status
                     # on Neutron server
                     if (self._port_info_has_changes(port_info) or
-                        self.sg_agent.firewall_refresh_needed() or
-                        ovs_restarted):
+                            self.sg_agent.firewall_refresh_needed() or
+                            ovs_restarted):
                         LOG.debug("Starting to process devices in:%s",
                                   port_info)
                         failed_devices = self.process_network_ports(
@@ -2081,9 +2126,8 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         if hasattr(signal, 'SIGHUP'):
             signal.signal(signal.SIGHUP, self._handle_sighup)
         with polling.get_polling_manager(
-            self.minimize_polling,
-            self.ovsdb_monitor_respawn_interval) as pm:
-
+                self.minimize_polling,
+                self.ovsdb_monitor_respawn_interval) as pm:
             self.rpc_loop(polling_manager=pm)
 
     def _handle_sigterm(self, signum, frame):
@@ -2116,7 +2160,6 @@ class OVSNeutronAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
     def _check_agent_configurations(self):
         if (self.enable_distributed_routing and self.enable_tunneling
             and not self.l2_pop):
-
             raise ValueError(_("DVR deployments for VXLAN/GRE/Geneve "
                                "underlays require L2-pop to be enabled, "
                                "in both the Agent and Server side."))

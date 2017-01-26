@@ -371,6 +371,12 @@ class OVSBridge(BaseOVS):
         # get the port name list for this bridge
         return self.ovsdb.list_ports(self.br_name).execute(check_error=True)
 
+    def get_port_numbers_list(self):
+        return self.ovsdb.db_list("Interface", ["5c769d33-c76a-4192-be55-9988cada77ee"], columns=["ofport", "_uuid"]).execute()
+
+    def get_port_number_list(self, port):
+        return self.ovsdb.db_list("Interface", columns=["ofport", "external_ids"]).execute()
+
     def get_port_stats(self, port_name):
         return self.db_get_val("Interface", port_name, "statistics")
 
@@ -480,6 +486,8 @@ class OVSBridge(BaseOVS):
         """
         results = self.get_ports_attributes(
             'Port', columns=['name', 'tag'], if_exists=True)
+        LOG.info(_LI("netanel results %(results)s not present in bridge "),
+                 {'results': results})
         return {p['name']: p['tag'] for p in results}
 
     def get_vifs_by_ids(self, port_ids):

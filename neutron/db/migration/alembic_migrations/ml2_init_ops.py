@@ -32,6 +32,16 @@ def upgrade():
                  'physical_network', 'allocated'))
 
     op.create_table(
+        'ml2_qinq_allocations',
+        sa.Column('physical_network', sa.String(length=64), nullable=False),
+        sa.Column('qinq_id', sa.Integer(), autoincrement=False,
+                  nullable=False),
+        sa.Column('allocated', sa.Boolean(), nullable=False),
+        sa.PrimaryKeyConstraint('physical_network', 'qinq_id'),
+        sa.Index(op.f('ix_ml2_qinq_allocations_physical_network_allocated'),
+                 'physical_network', 'allocated'))
+
+    op.create_table(
         'ml2_vxlan_endpoints',
         sa.Column('ip_address', sa.String(length=64), nullable=False),
         sa.Column('udp_port', sa.Integer(), autoincrement=False,
